@@ -9,29 +9,38 @@ var mongoUri = process.env.MONGOLAB_URI ||
 
 var app = express();
 
+app.configure(function () {
+  app.use(express.bodyParser());
+  // app.use(express.methodOverride());
+});
+
 var eventsCollection = function () {
   return mongo.db(mongoUri, {safe:true}).collection('events');
 };
 
 app.post('/api/events', function (req, res) {
-  eventsCollection().insert(event, { strict: true }, function (err, doc) {
+  var buildEvent = req.body;
+
+  console.log('inserting', buildEvent);
+
+  eventsCollection().insert(buildEvent, function (err, result) {
     if (err) {
-      res.send(500);
+      res.send(500, { error: err });
       return;
     }
 
-    res.send(doc);
+    res.send(201, result);
   });
 });
 
 app.get('/api/events', function (req, res) {
-  eventsCollection().find({}, function (err, cursor) {
+  eventsCollection().find().toArray(function (err, result) {
     if (err) {
       res.send(500);
       return;
     }
 
-    res.send(cursor);
+    res.send(result);
   });
 });
 
