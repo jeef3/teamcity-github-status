@@ -20,7 +20,8 @@
   "main": "index.js",
   "dependencies": {
     "express": "~3.4.8",
-    "mongoskin": "~0.6.1"
+    "mongoskin": "~0.6.1",
+    "request": "~2.33.0"
   },
   "devDependencies": {},
   "scripts": {
