@@ -2,14 +2,7 @@
   "name": "better-web-hooks",
   "version": "0.0.0",
   "description": "Better web hooks for TeamCity",
-  "main": "index.js",
-  "dependencies": {
-    "express": "~3.4.8"
-  },
-  "devDependencies": {},
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "homepage": "https://github.com/jeef3/better-web-hooks",
   "repository": {
     "type": "git",
     "url": "git://github.com/jeef3/better-web-hooks.git"
@@ -24,5 +17,16 @@
   "bugs": {
     "url": "https://github.com/jeef3/better-web-hooks/issues"
   },
-  "homepage": "https://github.com/jeef3/better-web-hooks"
+
+  "main": "index.js",
+  "dependencies": {
+    "express": "~3.4.8"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": "0.10.x"
+  }
 }
