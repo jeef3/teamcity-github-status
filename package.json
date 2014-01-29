@@ -17,10 +17,10 @@
   "bugs": {
     "url": "https://github.com/jeef3/better-web-hooks/issues"
   },
-
   "main": "index.js",
   "dependencies": {
-    "express": "~3.4.8"
+    "express": "~3.4.8",
+    "mongoskin": "~0.6.1"
   },
   "devDependencies": {},
   "scripts": {
