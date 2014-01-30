@@ -22,7 +22,9 @@ app.post('/api/events', function (req, res) {
 
       res.send(201, buildEvent);
 
-      tc.getBuildInfo(buildEvent.build.buildId)
+      var build = buildEvent.build;
+
+      tc.getBuildInfo(build.buildId)
         .then(function (buildInfo) {
           var sha = buildInfo.revisions.revision[0].version;
           console.log('Updating status for:', sha);
@@ -30,20 +32,20 @@ app.post('/api/events', function (req, res) {
           var state,
             description;
 
-          switch (buildEvent.buildResult) {
+          switch (build.buildResult) {
             case 'running':
               state = 'pending';
-              description = 'Build ' + buildEvent.buildNumber + ' in progress';
+              description = 'Build ' + build.buildNumber + ' in progress';
               break;
 
             case 'success':
               state = 'success';
-              description = 'Build ' + buildEvent.buildNumber + ' successful';
+              description = 'Build ' + build.buildNumber + ' successful';
               break;
 
             case 'fail': // TODO: Check?
               state = 'fail';
-              description = 'Build ' + buildEvent.buildNumber + ' failed';
+              description = 'Build ' + build.buildNumber + ' failed';
               break;
 
             default:
@@ -54,7 +56,7 @@ app.post('/api/events', function (req, res) {
           var repo = client.repo('skilitics/thrive');
           repo.status(sha, {
             state: state,
-            'target_url': buildInfo.webUrl,
+            'target_url': build.webUrl,
             description: description
           });
 
