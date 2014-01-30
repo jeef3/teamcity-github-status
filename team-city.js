@@ -4,7 +4,7 @@ var request = require('request');
 var Q = require('q');
 
 module.exports = {
-  getBuildInfo: function (buildNumber) {
+  getBuild: function (buildNumber) {
     var deferred = Q.defer();
 
     console.log('Getting build info for build', buildNumber);

@@ -9,47 +9,47 @@ var Builds = require('./builds');
 var app = express();
 
 var client = gitHub.client(process.env.GITHUB_TOKEN);
+var noop = function () {};
 
 app.configure(function () {
   app.use(express.bodyParser());
 });
 
 app.post('/api/events', function (req, res) {
-  console.log('Build recieved');
-
   Builds.add(req.body)
     .then(function (buildEvent) {
+      var buildId = buildEvent.build.buildId;
+      console.log('Build', buildId, 'saved');
 
       res.send(201, buildEvent);
 
-      var build = buildEvent.build;
-
-      tc.getBuildInfo(build.buildId)
-        .then(function (buildInfo) {
-          var sha = buildInfo.revisions.revision[0].version;
+      tc.getBuild(buildId)
+        .then(function (build) {
+          var sha = build.revisions.revision[0].version;
           console.log('Updating status for:', sha);
 
           var state,
             description;
 
-          switch (build.buildResult) {
-            case 'running':
+          switch (build.status) {
+            case 'RUNNING':
               state = 'pending';
-              description = 'Build ' + build.buildNumber + ' in progress';
+              description = 'Build ' + build.number + ' in progress';
               break;
 
-            case 'success':
+            case 'SUCCESS':
               state = 'success';
-              description = 'Build ' + build.buildNumber + ' successful';
+              description = 'Build ' + build.number + ' successful';
               break;
 
-            case 'fail': // TODO: Check?
+            case 'FAIL': // TODO: Check?
               state = 'fail';
-              description = 'Build ' + build.buildNumber + ' failed';
+              description = 'Build ' + build.number + ' failed';
               break;
 
             default:
-              state = 'success';
+              state = 'error';
+              description = 'I don\'t know what happened?';
           }
 
           // Update GitHub commit status
@@ -58,7 +58,7 @@ app.post('/api/events', function (req, res) {
             state: state,
             'target_url': build.webUrl,
             description: description
-          });
+          }, noop);
 
           // Post to Flowdock
         });
