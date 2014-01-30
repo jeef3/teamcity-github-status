@@ -25,5 +25,28 @@ module.exports = {
     });
 
     return deferred.promise;
+  },
+
+  getVscRootInstance: function (vcsRootInstanceId) {
+    var deferred = Q.defer();
+
+    console.log('Getting VCS root instance', vcsRootInstanceId);
+
+    var options = {
+      url: 'http://' + process.env.TC_URL + '/app/rest/vcs-root-instances/id:' + vcsRootInstanceId,
+      headers: {
+        'Accept': 'application/json'
+      }
+    };
+
+    request.get(options, function (err, response, vcsRootInstance) {
+      if (err || response.statusCode !== 200) {
+        deferred.reject(err);
+      }
+
+      deferred.resolve(JSON.parse(vcsRootInstance));
+    });
+
+    return deferred.promise;
   }
 };

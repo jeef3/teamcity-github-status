@@ -25,42 +25,60 @@ app.post('/api/events', function (req, res) {
 
       tc.getBuild(buildId)
         .then(function (build) {
-          var sha = build.revisions.revision[0].version;
-          console.log('Updating status for:', sha);
+          var revision = build.revisions.revision[0];
 
-          var state,
-            description;
+          tc.getVscRootInstance(revision['vcs-root-instance'].id)
+            .then(function (vcsRootInstance) {
+              var sha = revision.version;
+              console.log('Updating status for:', sha);
 
-          switch (build.status) {
-            case 'RUNNING':
-              state = 'pending';
-              description = 'Build ' + build.number + ' in progress';
-              break;
+              var state,
+                description;
 
-            case 'SUCCESS':
-              state = 'success';
-              description = 'Build ' + build.number + ' successful';
-              break;
+              switch (build.status) {
+                case 'RUNNING':
+                  state = 'pending';
+                  description = 'Build ' + build.number + ' in progress';
+                  break;
 
-            case 'FAIL': // TODO: Check?
-              state = 'fail';
-              description = 'Build ' + build.number + ' failed';
-              break;
+                case 'SUCCESS':
+                  state = 'success';
+                  description = 'Build ' + build.number + ' successful';
+                  break;
 
-            default:
-              state = 'error';
-              description = 'I don\'t know what happened?';
-          }
+                case 'FAIL': // TODO: Check?
+                  state = 'fail';
+                  description = 'Build ' + build.number + ' failed';
+                  break;
 
-          // Update GitHub commit status
-          var repo = client.repo('skilitics/thrive');
-          repo.status(sha, {
-            state: state,
-            'target_url': build.webUrl,
-            description: description
-          }, noop);
+                default:
+                  state = 'error';
+                  description = 'I don\'t know what happened?';
+              }
 
-          // Post to Flowdock
+              var url;
+              vcsRootInstance.properties.property.forEach(function (p) {
+                if (p.name === 'url') {
+                  url = p.value;
+                }
+              });
+
+              if (!url) {
+                throw new Error('Could not find VCS root instance GitHub URL');
+              }
+
+              var repoUrl = url.match(/git@github.com:(.*).git/)[1];
+
+              // Update GitHub commit status
+              var repo = client.repo(repoUrl);
+              repo.status(sha, {
+                state: state,
+                'target_url': build.webUrl,
+                description: description
+              }, noop);
+
+              // Post to Flowdock
+            });
         });
 
     }, function (err) {
