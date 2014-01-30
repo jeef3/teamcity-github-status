@@ -1,64 +1,75 @@
 'use strict';
 
 var express = require('express');
-var mongo = require('mongoskin');
-var request = require('request');
+var gitHub = require('octonode');
 
-var mongoUri = process.env.MONGOLAB_URI ||
-  process.env.MONGOHQ_URL ||
-  'mongodb://localhost/better-web-hooks';
+var tc = require('./team-city');
+var Builds = require('./builds');
 
 var app = express();
+
+var client = gitHub.client(process.env.GITHUB_TOKEN);
 
 app.configure(function () {
   app.use(express.bodyParser());
 });
 
-var eventsCollection = function () {
-  return mongo.db(mongoUri, {safe:true}).collection('events');
-};
-
 app.post('/api/events', function (req, res) {
-  var buildEvent = req.body;
+  console.log('Build recieved');
 
-  eventsCollection().insert(buildEvent, function (err, result) {
-    if (err) {
-      res.send(500, { error: err });
-      return;
-    }
+  Builds.add(req.body)
+    .then(function (buildEvent) {
 
-    res.send(201, result);
+      res.send(201, buildEvent);
 
-    var buildNumber = buildEvent.build.buildId;
+      tc.getBuildInfo(buildEvent.build.buildId)
+        .then(function (buildInfo) {
+          var sha = buildInfo.revisions.revision[0].version;
+          console.log('Updating status for:', sha);
 
-    var url = 'http://' + process.env.TC_URL + '/app/rest/builds/' + buildNumber;
+          var state,
+            description;
 
-    var options = {
-      url: url,
-      headers: {
-        'Accept': 'application/json'
-      }
-    };
+          switch (buildInfo.status) {
+            case 'SUCCESS':
+              state = 'success';
+              description = 'Build ' + buildInfo.number + ' successful';
+              break;
 
-    request.get(options, function (err, response, build) {
-      if (!err && response.statusCode === 200) {
-        build = JSON.parse(build);
-        var sha = build.revisions.revision[0].version;
-        console.log('SHA:', sha);
-      }
+            // TODO: Build in progress, pending.
+
+            case 'FAIL': // TODO: Check?
+              state = 'fail';
+              description = 'Build ' + buildInfo.number + ' failed';
+              break;
+
+            default:
+              state = 'success';
+          }
+
+          // Update GitHub commit status
+          var repo = client.repo('skilitics/thrive');
+          repo.status(sha, {
+            state: state,
+            'target_url': buildInfo.webUrl,
+            description: description
+          });
+
+          // Post to Flowdock
+        });
+
+    }, function (err) {
+      res.send(500, err);
     });
-  });
 });
 
 app.get('/api/events', function (req, res) {
-  eventsCollection().find().toArray(function (err, result) {
-    if (err) {
-      res.send(500);
-      return;
-    }
-
-    res.send(result);
-  });
+  Builds.all()
+    .then(function (builds) {
+      res.send(builds);
+    }, function (err) {
+      res.send(500, err);
+    });
 });
 
 var port = Number(process.env.PORT || 5000);
