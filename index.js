@@ -30,17 +30,20 @@ app.post('/api/events', function (req, res) {
           var state,
             description;
 
-          switch (buildInfo.status) {
-            case 'SUCCESS':
-              state = 'success';
-              description = 'Build ' + buildInfo.number + ' successful';
+          switch (buildEvent.buildResult) {
+            case 'running':
+              state = 'pending';
+              description = 'Build ' + buildEvent.buildNumber + ' in progress';
               break;
 
-            // TODO: Build in progress, pending.
+            case 'success':
+              state = 'success';
+              description = 'Build ' + buildEvent.buildNumber + ' successful';
+              break;
 
-            case 'FAIL': // TODO: Check?
+            case 'fail': // TODO: Check?
               state = 'fail';
-              description = 'Build ' + buildInfo.number + ' failed';
+              description = 'Build ' + buildEvent.buildNumber + ' failed';
               break;
 
             default:
