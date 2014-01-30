@@ -9,7 +9,7 @@ var Builds = require('./builds');
 var app = express();
 
 var client = gitHub.client(process.env.GITHUB_TOKEN);
-var noop = function () {};
+var noop = function (a) { console.log('I nooped', a); };
 
 app.configure(function () {
   app.use(express.bodyParser());
@@ -23,39 +23,36 @@ app.post('/api/events', function (req, res) {
 
       res.send(201, buildEvent);
 
+      var state,
+        description;
+
+      switch (buildEvent.build.buildResult.toLowerCase()) {
+        case 'running':
+          state = 'pending';
+          description = 'Build #' + buildEvent.build.buildNumber + ' in progress';
+          break;
+
+        case 'success':
+          state = 'success';
+          description = 'Build #' + buildEvent.build.buildNumber + ' successful';
+          break;
+
+        case 'failure': // TODO: Check?
+          state = 'failure';
+          description = 'Build #' + buildEvent.build.buildNumber + ' failed: ' + buildEvent.build.buildStatus;
+          break;
+
+        default:
+          state = 'error';
+          description = 'I don\'t know what happened?';
+      }
+
       tc.getBuild(buildId)
         .then(function (build) {
           var revision = build.revisions.revision[0];
 
           tc.getVscRootInstance(revision['vcs-root-instance'].id)
             .then(function (vcsRootInstance) {
-              var sha = revision.version;
-              console.log('Updating status for:', sha);
-
-              var state,
-                description;
-
-              switch (build.status) {
-                case 'RUNNING':
-                  state = 'pending';
-                  description = 'Build ' + build.number + ' in progress';
-                  break;
-
-                case 'SUCCESS':
-                  state = 'success';
-                  description = 'Build ' + build.number + ' successful';
-                  break;
-
-                case 'FAIL': // TODO: Check?
-                  state = 'fail';
-                  description = 'Build ' + build.number + ' failed';
-                  break;
-
-                default:
-                  state = 'error';
-                  description = 'I don\'t know what happened?';
-              }
-
               var url;
               vcsRootInstance.properties.property.forEach(function (p) {
                 if (p.name === 'url') {
@@ -68,12 +65,17 @@ app.post('/api/events', function (req, res) {
               }
 
               var repoUrl = url.match(/git@github.com:(.*).git/)[1];
+              var sha = revision.version;
+
+              console.log('Updating (' + repoUrl + '/' + sha + ')');
+              console.log('Build', state);
+              console.log(description);
 
               // Update GitHub commit status
               var repo = client.repo(repoUrl);
               repo.status(sha, {
                 state: state,
-                'target_url': build.webUrl,
+                'target_url': buildEvent.build.buildStatusUrl,
                 description: description
               }, noop);
 
