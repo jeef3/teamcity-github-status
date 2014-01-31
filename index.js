@@ -23,28 +23,43 @@ app.post('/api/events', function (req, res) {
 
       res.send(201, buildEvent);
 
+      var buildResult = buildEvent.build.buildResult.toLowerCase();
+      var notifyType = buildEvent.build.notifyType.toLowerCase();
+      var buildNumber = buildEvent.build.buildNumber;
+      var buildStatusText = buildEvent.build.buildStatus;
+
       var state,
         description;
 
-      switch (buildEvent.build.buildResult.toLowerCase()) {
-        case 'running':
-          state = 'pending';
-          description = 'Build #' + buildEvent.build.buildNumber + ' in progress';
-          break;
+      // TeamCity has a rather complicated mixture of result and type to
+      // determine state
+      if (notifyType === 'buildstarted') {
+        state = 'pending';
+        description = 'Build #' + buildNumber + ' in progress';
+      } else if (notifyType === 'buildinterrupted') {
+        //error: interrupted
+        state = 'error';
+        description = 'Build #' + buildNumber + ' interrupted';
 
-        case 'success':
+      } else if (notifyType === 'beforebuildfinish') {
+        state = 'pending';
+        description = 'Build #' + buildNumber + ' almost finished';
+
+      } else if (notifyType === 'buildfinished') {
+        // check status: success/failure
+        if (buildResult === 'success') {
           state = 'success';
-          description = 'Build #' + buildEvent.build.buildNumber + ' successful';
-          break;
-
-        case 'failure': // TODO: Check?
+          description = 'Build #' + buildNumber + ' successful';
+        } else if (buildResult === 'failure') {
           state = 'failure';
-          description = 'Build #' + buildEvent.build.buildNumber + ' failed: ' + buildEvent.build.buildStatus;
-          break;
-
-        default:
+          description = 'Build #' + buildNumber + ' failed';
+        } else {
           state = 'error';
-          description = 'I don\'t know what happened?';
+          description = buildStatusText;
+        }
+      } else {
+        state = 'error';
+        description = buildStatusText;
       }
 
       tc.getBuild(buildId)
