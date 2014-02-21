@@ -1,7 +1,10 @@
 'use strict';
 
 var express = require('express');
+var ejs = require('ejs');
+var dot = require('dot');
 var gitHub = require('octonode');
+var Session = require('flowdock').Session;
 
 var tc = require('./team-city');
 var Builds = require('./builds');
@@ -9,7 +12,10 @@ var Builds = require('./builds');
 var app = express();
 
 var client = gitHub.client(process.env.GITHUB_TOKEN);
+var flowdock = new Session(process.env.FLOWDOCK_TOKEN);
 var noop = function (a) { console.log('I nooped', a); };
+
+var dots = dot.process({ path: '.' });
 
 app.configure(function () {
   app.use(express.bodyParser());
@@ -95,6 +101,25 @@ app.post('/api/events', function (req, res) {
               }, noop);
 
               // Post to Flowdock
+              flowdock.send('/v1/messages/team_inbox/' + process.env.FLOWDOCK_TOKEN,
+                {
+
+                  source: 'better-webhooks',
+                  'from_address': 'mail+johnny@jeef3.com',
+                  subject: description,
+                  content: dots.flowdock({
+                    build: buildEvent.build,
+                    buildJSON: JSON.stringify(buildEvent.build),
+                    description: description
+                  }),
+                  'from_name': 'TeamCity',
+                  project: '',
+                  tags: [],
+                  link: buildEvent.build.buildStatusUrl
+                },
+                function () {
+                  console.log('Message sent to Flowdock');
+                });
             });
         });
 
