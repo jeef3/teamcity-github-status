@@ -1,7 +1,7 @@
 'use strict';
 
 var express = require('express');
-var ejs = require('ejs');
+var Q = require('q');
 var dot = require('dot');
 var gitHub = require('octonode');
 var Session = require('flowdock').Session;
@@ -21,108 +21,138 @@ app.configure(function () {
   app.use(express.bodyParser());
 });
 
-app.post('/api/events', function (req, res) {
-  Builds.add(req.body)
-    .then(function (buildEvent) {
-      var buildId = buildEvent.build.buildId;
-      console.log('Build', buildId, 'saved');
+var handleEvent = function (buildEvent) {
+  var deferred = Q.defer();
 
-      res.send(201, buildEvent);
+  var buildId = buildEvent.build.buildId;
+  var buildResult = buildEvent.build.buildResult.toLowerCase();
+  var notifyType = buildEvent.build.notifyType.toLowerCase();
+  var buildNumber = buildEvent.build.buildNumber;
+  var buildStatusText = buildEvent.build.buildStatus;
 
-      var buildResult = buildEvent.build.buildResult.toLowerCase();
-      var notifyType = buildEvent.build.notifyType.toLowerCase();
-      var buildNumber = buildEvent.build.buildNumber;
-      var buildStatusText = buildEvent.build.buildStatus;
+  var state,
+    description;
 
-      var state,
-        description;
+  // TeamCity has a rather complicated mixture of result and type to
+  // determine state
+  if (notifyType === 'buildstarted') {
+    state = 'pending';
+    description = 'Build #' + buildNumber + ' in progress';
+  } else if (notifyType === 'buildinterrupted') {
+    //error: interrupted
+    state = 'error';
+    description = 'Build #' + buildNumber + ' interrupted';
 
-      // TeamCity has a rather complicated mixture of result and type to
-      // determine state
-      if (notifyType === 'buildstarted') {
-        state = 'pending';
-        description = 'Build #' + buildNumber + ' in progress';
-      } else if (notifyType === 'buildinterrupted') {
-        //error: interrupted
-        state = 'error';
-        description = 'Build #' + buildNumber + ' interrupted';
+  } else if (notifyType === 'beforebuildfinish') {
+    state = 'pending';
+    description = 'Build #' + buildNumber + ' almost finished';
 
-      } else if (notifyType === 'beforebuildfinish') {
-        state = 'pending';
-        description = 'Build #' + buildNumber + ' almost finished';
+  } else if (notifyType === 'buildfinished') {
+    // check status: success/failure
+    if (buildResult === 'success') {
+      state = 'success';
+      description = 'Build #' + buildNumber + ' successful';
+    } else if (buildResult === 'failure') {
+      state = 'failure';
+      description = 'Build #' + buildNumber + ' failed';
+    } else {
+      state = 'error';
+      description = buildStatusText;
+    }
+  } else {
+    state = 'error';
+    description = buildStatusText;
+  }
 
-      } else if (notifyType === 'buildfinished') {
-        // check status: success/failure
-        if (buildResult === 'success') {
-          state = 'success';
-          description = 'Build #' + buildNumber + ' successful';
-        } else if (buildResult === 'failure') {
-          state = 'failure';
-          description = 'Build #' + buildNumber + ' failed';
-        } else {
-          state = 'error';
-          description = buildStatusText;
-        }
-      } else {
-        state = 'error';
-        description = buildStatusText;
-      }
+  tc.getBuild(buildId)
+    .then(function (build) {
+      var revision = build.revisions.revision[0];
 
-      tc.getBuild(buildId)
-        .then(function (build) {
-          var revision = build.revisions.revision[0];
+      tc.getVscRootInstance(revision['vcs-root-instance'].id)
+        .then(function (vcsRootInstance) {
+          var url;
+          vcsRootInstance.properties.property.forEach(function (p) {
+            if (p.name === 'url') {
+              url = p.value;
+            }
+          });
 
-          tc.getVscRootInstance(revision['vcs-root-instance'].id)
-            .then(function (vcsRootInstance) {
-              var url;
-              vcsRootInstance.properties.property.forEach(function (p) {
-                if (p.name === 'url') {
-                  url = p.value;
-                }
-              });
+          if (!url) {
+            throw new Error('Could not find VCS root instance GitHub URL');
+          }
 
-              if (!url) {
-                throw new Error('Could not find VCS root instance GitHub URL');
-              }
+          var repoUrl = url.match(/git@github.com:(.*).git/)[1];
+          var sha = revision.version;
 
-              var repoUrl = url.match(/git@github.com:(.*).git/)[1];
-              var sha = revision.version;
+          console.log('Updating (' + repoUrl + '/' + sha + ')');
+          console.log('Build', state);
+          console.log(description);
 
-              console.log('Updating (' + repoUrl + '/' + sha + ')');
-              console.log('Build', state);
-              console.log(description);
+          deferred.resolve({
+            repoUrl: repoUrl,
+            sha: sha,
+            state: state,
+            description: description,
+            buildEvent: buildEvent
+          });
+        });
+    });
 
-              // Update GitHub commit status
-              var repo = client.repo(repoUrl);
-              repo.status(sha, {
-                state: state,
-                'target_url': buildEvent.build.buildStatusUrl,
-                description: description
-              }, noop);
+  return deferred.promise;
+};
 
-              // Post to Flowdock
-              flowdock.send('/v1/messages/team_inbox/' + process.env.FLOWDOCK_TOKEN,
-                {
+app.post('/flowdock', function (req, res) {
+  var buildEvent = req.body;
 
-                  source: 'better-webhooks',
-                  'from_address': 'mail+johnny@jeef3.com',
-                  subject: description,
-                  content: dots.flowdock({
-                    build: buildEvent.build,
-                    buildJSON: JSON.stringify(buildEvent.build),
-                    description: description
-                  }),
-                  'from_name': 'TeamCity',
-                  project: '',
-                  tags: [],
-                  link: buildEvent.build.buildStatusUrl
-                },
-                function () {
-                  console.log('Message sent to Flowdock');
-                });
-            });
+  console.log('Build %d received, pushing to Flowdock', buildEvent.build.buildId);
+
+  handleEvent(buildEvent)
+    .then(function (completeBuildEvent) {
+
+      // Post to Flowdock
+      flowdock.send('/v1/messages/team_inbox/' + process.env.FLOWDOCK_TOKEN,
+        {
+
+          source: 'better-webhooks',
+          'from_address': 'mail+johnny@jeef3.com',
+          subject: completeBuildEvent.description,
+          content: dots.flowdock({
+            build: completeBuildEvent.buildEvent.build,
+            buildJSON: JSON.stringify(completeBuildEvent.buildEvent.build),
+            description: completeBuildEvent.description
+          }),
+          'from_name': 'TeamCity',
+          project: '',
+          tags: [],
+          link: completeBuildEvent.buildEvent.build.buildStatusUrl
+        },
+        function () {
+          console.log('Message sent to Flowdock');
         });
 
+      res.send(201);
+    }, function (err) {
+      res.send(500, err);
+    });
+});
+
+app.post('/github', function (req, res) {
+  var buildEvent = req.body;
+
+  console.log('Build %d received, pushing to GitHub', buildEvent.build.buildId);
+
+  handleEvent(buildEvent)
+    .then(function (completeBuildEvent) {
+
+      // Update GitHub commit status
+      var repo = client.repo(completeBuildEvent.repoUrl);
+      repo.status(completeBuildEvent.sha, {
+        state: completeBuildEvent.state,
+        'target_url': buildEvent.build.buildStatusUrl,
+        description: completeBuildEvent.description
+      }, noop);
+
+      res.send(201);
     }, function (err) {
       res.send(500, err);
     });
