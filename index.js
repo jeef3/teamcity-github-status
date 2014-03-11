@@ -5,6 +5,7 @@ var Q = require('q');
 var dot = require('dot');
 var gitHub = require('octonode');
 var Session = require('flowdock').Session;
+require('colors');
 
 var tc = require('./team-city');
 var Builds = require('./builds');
@@ -13,7 +14,6 @@ var app = express();
 
 var client = gitHub.client(process.env.GITHUB_TOKEN);
 var flowdock = new Session(process.env.FLOWDOCK_TOKEN);
-var noop = function (a) { console.log('I nooped', a); };
 
 var dots = dot.process({ path: '.' });
 
@@ -102,12 +102,15 @@ var handleEvent = function (buildEvent) {
 };
 
 app.post('/flowdock', function (req, res) {
+  res.send(201);
+
   var buildEvent = req.body;
 
-  console.log('Build %d received, pushing to Flowdock', buildEvent.build.buildId);
+  console.log('Build %d received (Flowdock)', buildEvent.build.buildId);
 
   handleEvent(buildEvent)
     .then(function (completeBuildEvent) {
+      console.log('Build %d handled, sending to Flowdock', buildEvent.build.buildId);
 
       // Post to Flowdock
       flowdock.send('/v1/messages/team_inbox/' + process.env.FLOWDOCK_TOKEN,
@@ -127,22 +130,24 @@ app.post('/flowdock', function (req, res) {
           link: completeBuildEvent.buildEvent.build.buildStatusUrl
         },
         function () {
-          console.log('Message sent to Flowdock');
+          console.log('Message sent to Flowdock'.green);
         });
 
-      res.send(201);
     }, function (err) {
-      res.send(500, err);
+      console.log(err.red);
     });
 });
 
 app.post('/github', function (req, res) {
+  res.send(201);
+
   var buildEvent = req.body;
 
-  console.log('Build %d received, pushing to GitHub', buildEvent.build.buildId);
+  console.log('Build %d received (GitHub)', buildEvent.build.buildId);
 
   handleEvent(buildEvent)
     .then(function (completeBuildEvent) {
+      console.log('Build %d handled, pushing to GitHub', buildEvent.build.buildId);
 
       // Update GitHub commit status
       var repo = client.repo(completeBuildEvent.repoUrl);
@@ -150,11 +155,15 @@ app.post('/github', function (req, res) {
         state: completeBuildEvent.state,
         'target_url': buildEvent.build.buildStatusUrl,
         description: completeBuildEvent.description
-      }, noop);
-
-      res.send(201);
+      }, function (err) {
+        if (err) {
+          console.log(err.red);
+        } else {
+          console.log('Build status sent to GitHub'.green);
+        }
+      });
     }, function (err) {
-      res.send(500, err);
+      console.log(err.red);
     });
 });
 
