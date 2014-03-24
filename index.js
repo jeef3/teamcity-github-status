@@ -2,9 +2,8 @@
 
 var express = require('express');
 var Q = require('q');
-var dot = require('dot');
 var gitHub = require('octonode');
-var Session = require('flowdock').Session;
+
 require('colors');
 
 var tc = require('./team-city');
@@ -13,9 +12,6 @@ var Builds = require('./builds');
 var app = express();
 
 var client = gitHub.client(process.env.GITHUB_TOKEN);
-var flowdock = new Session(process.env.FLOWDOCK_TOKEN);
-
-var dots = dot.process({ path: '.' });
 
 app.configure(function () {
   app.use(express.bodyParser());
@@ -100,43 +96,6 @@ var handleEvent = function (buildEvent) {
 
   return deferred.promise;
 };
-
-app.post('/flowdock', function (req, res) {
-  res.send(201);
-
-  var buildEvent = req.body;
-
-  console.log('Build %d received (Flowdock)', buildEvent.build.buildId);
-
-  handleEvent(buildEvent)
-    .then(function (completeBuildEvent) {
-      console.log('Build %d handled, sending to Flowdock', buildEvent.build.buildId);
-
-      // Post to Flowdock
-      flowdock.send('/v1/messages/team_inbox/' + process.env.FLOWDOCK_TOKEN,
-        {
-
-          source: 'better-webhooks',
-          'from_address': 'mail+johnny@jeef3.com',
-          subject: completeBuildEvent.description,
-          content: dots.flowdock({
-            build: completeBuildEvent.buildEvent.build,
-            buildJSON: JSON.stringify(completeBuildEvent.buildEvent.build),
-            description: completeBuildEvent.description
-          }),
-          'from_name': 'TeamCity',
-          project: '',
-          tags: [],
-          link: completeBuildEvent.buildEvent.build.buildStatusUrl
-        },
-        function () {
-          console.log('Message sent to Flowdock'.green);
-        });
-
-    }, function (err) {
-      console.log(err.red);
-    });
-});
 
 app.post('/github', function (req, res) {
   res.send(201);
