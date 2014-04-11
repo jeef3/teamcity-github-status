@@ -1,11 +1,11 @@
 {
-  "name": "better-web-hooks",
-  "version": "0.0.0",
+  "name": "teamcity-github-status",
+  "version": "0.0.1",
   "description": "GitHub commit status from TeamCity",
-  "homepage": "https://github.com/jeef3/better-web-hooks",
+  "homepage": "https://github.com/jeef3/teamcity-github-status",
   "repository": {
     "type": "git",
-    "url": "git://github.com/jeef3/better-web-hooks.git"
+    "url": "git://github.com/jeef3/teamcity-github-status.git"
   },
   "keywords": [
     "TeamCity",
@@ -16,12 +16,11 @@
   "author": "Jeff Knaggs",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/jeef3/better-web-hooks/issues"
+    "url": "https://github.com/jeef3/teamcity-github-status/issues"
   },
   "main": "index.js",
   "dependencies": {
     "express": "~3.4.8",
-    "mongoskin": "~0.6.1",
     "q": "~1.0.0",
     "octonode": "~0.5.0",
     "request": "~2.33.0",

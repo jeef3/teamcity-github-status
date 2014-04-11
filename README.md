@@ -1,6 +1,6 @@
-# Better Web Hooks
+# TeamCity GitHub Status
 
-Better web hook handling for TeamCity.
+GitHub commit status from TeamCity
 
 ## Set-up
 
@@ -8,9 +8,12 @@ Make sure you have the [TeamCity WebHooks plugin](http://netwolfuk.wordpress.com
 
 Set-up environment variables for:
 
- - `TC_URL` - Your TeamCity root URL, including username/password
- - `GITHUB_TOKEN` - A personal GitHub token
- 
-Clone and run Better Web Hooks.
+ - `TEAMCITY_USERNAME`
+ - `TEAMCITY_PASSWORD`
+ - `TEAMCITY_PROTOCOL`
+ - `TEAMCITY_BASE_URL`
+ - `GITHUB_TOKEN`
 
-Set-up web hooks in TeamCity to point to where ever Better Web Hooks is running.
+Start up the server with `npm start`
+
+Set-up web hooks in TeamCity to point to where ever the server is running.
