@@ -2,16 +2,24 @@
 
 var express = require('express');
 var Q = require('q');
-var gitHub = require('octonode');
+var dotenv = require('dotenv');
+var nconf = require('nconf');
 
 require('colors');
 
-var tc = require('./team-city');
-var Builds = require('./builds');
+dotenv.load();
+nconf
+  .argv()
+  .env();
 
 var app = express();
-
-var client = gitHub.client(process.env.GITHUB_TOKEN);
+var client = require('octonode').client(nconf.get('GITHUB_TOKEN'));
+var teamcity = require('teamcity').client({
+  username: nconf.get('TEAMCITY_USERNAME'),
+  password: nconf.get('TEAMCITY_PASSWORD'),
+  protocol: nconf.get('TEAMCITY_PROTOCOL'),
+  baseUrl: nconf.get('TEAMCITY_BASE_URL')
+});
 
 app.configure(function () {
   app.use(express.bodyParser());
@@ -60,12 +68,22 @@ var handleEvent = function (buildEvent) {
     description = buildStatusText;
   }
 
-  tc.getBuild(buildId)
-    .then(function (build) {
+  teamcity
+    .build(buildId)
+    .info(function (err, build) {
+      if (err) {
+        throw err;
+      }
+
       var revision = build.revisions.revision[0];
 
-      tc.getVscRootInstance(revision['vcs-root-instance'].id)
-        .then(function (vcsRootInstance) {
+      teamcity
+        .vcsRootInstance(revision['vcs-root-instance'].id)
+        .info(function (err, vcsRootInstance) {
+          if (err) {
+            throw err;
+          }
+
           var url;
           vcsRootInstance.properties.property.forEach(function (p) {
             if (p.name === 'url') {
@@ -123,15 +141,6 @@ app.post('/github', function (req, res) {
       });
     }, function (err) {
       console.log(err.red);
-    });
-});
-
-app.get('/api/events', function (req, res) {
-  Builds.all()
-    .then(function (builds) {
-      res.send(builds);
-    }, function (err) {
-      res.send(500, err);
     });
 });
 

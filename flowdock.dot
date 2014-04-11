@@ -1,3 +1,0 @@
-{{=it.build.buildStatusHtml}}
-
-<div style="display:none">{{=it.buildJSON}}</div>

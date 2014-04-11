@@ -1,7 +1,7 @@
 {
   "name": "better-web-hooks",
   "version": "0.0.0",
-  "description": "Better web hooks for TeamCity",
+  "description": "GitHub commit status from TeamCity",
   "homepage": "https://github.com/jeef3/better-web-hooks",
   "repository": {
     "type": "git",
@@ -9,11 +9,12 @@
   },
   "keywords": [
     "TeamCity",
-    "web",
-    "hooks"
+    "GitHug",
+    "commit",
+    "status"
   ],
   "author": "Jeff Knaggs",
-  "license": "BSD-2-Clause",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/jeef3/better-web-hooks/issues"
   },
@@ -24,11 +25,15 @@
     "q": "~1.0.0",
     "octonode": "~0.5.0",
     "request": "~2.33.0",
-    "colors": "^0.6.2"
+    "colors": "^0.6.2",
+    "dotenv": "^0.2.7",
+    "nconf": "^0.6.9",
+    "teamcity": "0.0.1"
   },
   "devDependencies": {},
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index"
   },
   "engines": {
     "node": "0.10.x"
