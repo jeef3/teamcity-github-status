@@ -82,7 +82,8 @@ var handleEvent = function (buildEvent) {
       if (!build.revisions ||
           !build.revisions.revision ||
           !build.revisions.revision.length) {
-        deferred.reject('No revisions found for build ' + buildId);
+        deferred.reject('No revisions found');
+        console.log(build);
         return;
       }
 
@@ -135,7 +136,7 @@ app.post('/github', function (req, res) {
 
   handleEvent(buildEvent)
     .then(function (completeBuildEvent) {
-      console.log('(%s) Status handled, pushing to GitHub', buildEvent.build.buildId);
+      console.log('(%s:%s) Status handled, pushing to GitHub', buildEvent.build.buildId, buildEvent.build.notifyType);
 
       // Update GitHub commit status
       var repo = client.repo(completeBuildEvent.repoUrl);
