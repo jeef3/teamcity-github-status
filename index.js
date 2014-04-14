@@ -83,6 +83,9 @@ var handleEvent = function (buildEvent) {
           !build.revisions.revision ||
           !build.revisions.revision.length) {
         deferred.reject('No revisions found');
+        console.log('---- Build Event ----');
+        console.log(buildEvent);
+        console.log('---- Build Info ----');
         console.log(build);
         return;
       }
