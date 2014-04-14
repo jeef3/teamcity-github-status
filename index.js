@@ -68,7 +68,7 @@ var handleEvent = function (buildEvent) {
     description = buildStatusText;
   }
 
-  console.log('Status: %s: %s', state, description);
+  console.log('(%s) %s: %s', buildId, state, description);
 
   teamcity
     .build(buildId)
@@ -77,7 +77,7 @@ var handleEvent = function (buildEvent) {
         throw err;
       }
 
-      console.log('Received info for build %s', buildId);
+      console.log('(%s) Received info', buildId);
 
       if (!build.revisions ||
           !build.revisions.revision ||
@@ -88,7 +88,7 @@ var handleEvent = function (buildEvent) {
 
       var revision = build.revisions.revision[0];
 
-      console.log('Getting build %s VCS info', buildId);
+      console.log('(%s) Getting VCS info', buildId);
 
       teamcity
         .vcsRootInstance(revision['vcs-root-instance'].id)
@@ -111,9 +111,7 @@ var handleEvent = function (buildEvent) {
           var repoUrl = url.match(/git@github.com:(.*).git/)[1];
           var sha = revision.version;
 
-          console.log('Updating (' + repoUrl + '/' + sha + ')');
-          console.log('Build', state);
-          console.log(description);
+          console.log('(%s) Found VCS (%s/%s)', buildId, repoUrl, sha);
 
           deferred.resolve({
             repoUrl: repoUrl,
@@ -133,11 +131,11 @@ app.post('/github', function (req, res) {
 
   var buildEvent = req.body;
 
-  console.log('Status for build %d received', buildEvent.build.buildId);
+  console.log('(%s) status received', buildEvent.build.buildId);
 
   handleEvent(buildEvent)
     .then(function (completeBuildEvent) {
-      console.log('Status for build %d handled, pushing to GitHub', buildEvent.build.buildId);
+      console.log('(%s) Status handled, pushing to GitHub', buildEvent.build.buildId);
 
       // Update GitHub commit status
       var repo = client.repo(completeBuildEvent.repoUrl);
@@ -147,13 +145,13 @@ app.post('/github', function (req, res) {
         description: completeBuildEvent.description
       }, function (err) {
         if (err) {
-          console.log(err.red);
+          console.log('(%s) %s'.red, buildEvent.build.buildId, err);
         } else {
-          console.log('Build status sent to GitHub'.green);
+          console.log('(%s) Build status sent to GitHub'.green, buildEvent.build.buildId);
         }
       });
     }, function (err) {
-      console.log(err.red);
+      console.log('(%s) %s'.red, buildEvent.build.buildId, err);
     });
 });
 
