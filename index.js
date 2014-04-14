@@ -75,6 +75,14 @@ var handleEvent = function (buildEvent) {
         throw err;
       }
 
+      if (!build.revisions ||
+          !build.revisions.revision ||
+          !build.revisions.revision.length) {
+        console.log('No revisions found in', build);
+        deferred.reject('No revisions found in');
+        return;
+      }
+
       var revision = build.revisions.revision[0];
 
       teamcity
