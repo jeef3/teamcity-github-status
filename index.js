@@ -68,6 +68,8 @@ var handleEvent = function (buildEvent) {
     description = buildStatusText;
   }
 
+  console.log('Status: %s: %s', state, description);
+
   teamcity
     .build(buildId)
     .info(function (err, build) {
@@ -75,15 +77,18 @@ var handleEvent = function (buildEvent) {
         throw err;
       }
 
+      console.log('Received info for build %s', buildId);
+
       if (!build.revisions ||
           !build.revisions.revision ||
           !build.revisions.revision.length) {
-        console.log('No revisions found in', build);
-        deferred.reject('No revisions found in');
+        deferred.reject('No revisions found for build ' + buildId);
         return;
       }
 
       var revision = build.revisions.revision[0];
+
+      console.log('Getting build %s VCS info', buildId);
 
       teamcity
         .vcsRootInstance(revision['vcs-root-instance'].id)
@@ -128,11 +133,11 @@ app.post('/github', function (req, res) {
 
   var buildEvent = req.body;
 
-  console.log('Build %d received (GitHub)', buildEvent.build.buildId);
+  console.log('Status for build %d received', buildEvent.build.buildId);
 
   handleEvent(buildEvent)
     .then(function (completeBuildEvent) {
-      console.log('Build %d handled, pushing to GitHub', buildEvent.build.buildId);
+      console.log('Status for build %d handled, pushing to GitHub', buildEvent.build.buildId);
 
       // Update GitHub commit status
       var repo = client.repo(completeBuildEvent.repoUrl);
