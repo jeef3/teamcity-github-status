@@ -79,51 +79,59 @@ var handleEvent = function (buildEvent) {
 
       console.log('(%s:%s) Received build info from TeamCity', buildId, buildEvent.build.notifyType);
 
-      if (!build.revisions ||
-          !build.revisions.revision ||
-          !build.revisions.revision.length) {
-        deferred.reject('No revisions found');
-        console.log('---- Build Event ----');
-        console.log(buildEvent);
-        console.log('---- Build Info ----');
-        console.log(build);
-        return;
-      }
-
-      var revision = build.revisions.revision[0];
-
-      console.log('(%s:%s) Getting VCS info', buildId, buildEvent.build.notifyType);
-
       teamcity
-        .vcsRootInstance(revision['vcs-root-instance'].id)
-        .info(function (err, vcsRootInstance) {
+        .change({ locator: 'build:(id:' + buildId + ')'})
+        .query(function (err, changeResult) {
           if (err) {
             throw err;
           }
 
-          var url;
-          vcsRootInstance.properties.property.forEach(function (p) {
-            if (p.name === 'url') {
-              url = p.value;
-            }
-          });
-
-          if (!url) {
-            throw new Error('Could not find VCS root instance GitHub URL');
+          if (!changeResult.count) {
+            deferred.reject('No changes found');
+            return;
           }
 
-          var repoUrl = url.match(/git@github.com:(.*).git/)[1];
-          var sha = revision.version;
+          teamcity
+            .change(changeResult.change[0].id)
+            .info(function (err, change) {
+              if (err) {
+                throw err;
+              }
 
-          console.log('(%s:%s) Found VCS (%s/%s)', buildId, buildEvent.build.notifyType, repoUrl, sha);
+              console.log('(%s:%s) Getting VCS info', buildId, buildEvent.build.notifyType);
 
-          deferred.resolve({
-            repoUrl: repoUrl,
-            sha: sha,
-            state: state,
-            description: description,
-            buildEvent: buildEvent
-          });
+              teamcity
+                .vcsRootInstance(change.vcsRootInstance.id)
+                .info(function (err, vcsRootInstance) {
+                  if (err) {
+                    throw err;
+                  }
+
+                  var url;
+                  vcsRootInstance.properties.property.forEach(function (p) {
+                    if (p.name === 'url') {
+                      url = p.value;
+                    }
+                  });
+
+                  if (!url) {
+                    throw new Error('Could not find VCS root instance GitHub URL');
+                  }
+
+                  var repoUrl = url.match(/git@github.com:(.*).git/)[1];
+                  var sha = change.version;
+
+                  console.log('(%s:%s) Found VCS (%s/%s)', buildId, buildEvent.build.notifyType, repoUrl, sha);
+
+                  deferred.resolve({
+                    repoUrl: repoUrl,
+                    sha: sha,
+                    state: state,
+                    description: description,
+                    buildEvent: buildEvent
+                  });
+                });
+            });
         });
     });
 
