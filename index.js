@@ -25,50 +25,56 @@ app.configure(function () {
   app.use(express.bodyParser());
 });
 
-var handleEvent = function (buildEvent) {
-  var deferred = Q.defer();
+var buildMessage = function (build) {
+  var message = {};
 
-  var buildId = buildEvent.build.buildId;
-  var buildResult = buildEvent.build.buildResult.toLowerCase();
-  var notifyType = buildEvent.build.notifyType.toLowerCase();
-  var buildNumber = buildEvent.build.buildNumber;
-  var buildStatusText = buildEvent.build.buildStatus;
-
-  var state,
-    description;
+  var buildResult = build.buildResult.toLowerCase();
+  var notifyType = build.notifyType.toLowerCase();
+  var buildNumber = build.buildNumber;
+  var buildStatusText = build.buildStatus;
 
   // TeamCity has a rather complicated mixture of result and type to
   // determine state
   if (notifyType === 'buildstarted') {
-    state = 'pending';
-    description = 'Build #' + buildNumber + ' in progress';
+    message.state = 'pending';
+    message.description = 'Build #' + buildNumber + ' in progress';
   } else if (notifyType === 'buildinterrupted') {
     //error: interrupted
-    state = 'error';
-    description = 'Build #' + buildNumber + ' interrupted';
+    message.state = 'error';
+    message.description = 'Build #' + buildNumber + ' interrupted';
 
   } else if (notifyType === 'beforebuildfinish') {
-    state = 'pending';
-    description = 'Build #' + buildNumber + ' almost finished';
+    message.state = 'pending';
+    message.description = 'Build #' + buildNumber + ' almost finished';
 
   } else if (notifyType === 'buildfinished') {
     // check status: success/failure
     if (buildResult === 'success') {
-      state = 'success';
-      description = 'Build #' + buildNumber + ' successful';
+      message.state = 'success';
+      message.description = 'Build #' + buildNumber + ' successful';
     } else if (buildResult === 'failure') {
-      state = 'failure';
-      description = 'Build #' + buildNumber + ' failed';
+      message.state = 'failure';
+      message.description = 'Build #' + buildNumber + ' failed';
     } else {
-      state = 'error';
-      description = buildStatusText;
+      message.state = 'error';
+      message.description = buildStatusText;
     }
   } else {
-    state = 'error';
-    description = buildStatusText;
+    message.state = 'error';
+    message.description = buildStatusText;
   }
 
-  console.log('(%s:%s) %s', buildId, buildEvent.build.notifyType, description);
+  return message;
+};
+
+var handleEvent = function (buildEvent) {
+  var deferred = Q.defer();
+
+  var buildId = buildEvent.build.buildId;
+  var message = buildMessage(buildEvent.build);
+
+  console.log('(%s:%s) Message: %s', buildId, buildEvent.build.notifyType, message.description);
+  console.log('(%s:%s) Requesting build info from TeamCity', buildId, buildEvent.build.notifyType);
 
   teamcity
     .build(buildId)
@@ -78,12 +84,14 @@ var handleEvent = function (buildEvent) {
       }
 
       console.log('(%s:%s) Received build info from TeamCity', buildId, buildEvent.build.notifyType);
+      console.log('(%s:%s) Requesting change info from TeamCity', buildId, buildEvent.build.notifyType);
 
       teamcity
         .change({ locator: 'build:(id:' + buildId + ')'})
         .query(function (err, changeResult) {
           if (err) {
-            throw err;
+            deferred.reject(err);
+            return;
           }
 
           if (!changeResult.count) {
@@ -126,8 +134,8 @@ var handleEvent = function (buildEvent) {
                   deferred.resolve({
                     repoUrl: repoUrl,
                     sha: sha,
-                    state: state,
-                    description: description,
+                    state: message.state,
+                    description: message.description,
                     buildEvent: buildEvent
                   });
                 });
@@ -143,7 +151,9 @@ app.post('/github', function (req, res) {
 
   var buildEvent = req.body;
 
-  console.log('(%s:%s) Webhook received', buildEvent.build.buildId, buildEvent.build.notifyType);
+  console.log('(%s:%s) Received TeamCity build event'.bold.white,
+    buildEvent.build.buildId,
+    buildEvent.build.notifyType);
 
   handleEvent(buildEvent)
     .then(function (completeBuildEvent) {
@@ -157,13 +167,13 @@ app.post('/github', function (req, res) {
         description: completeBuildEvent.description
       }, function (err) {
         if (err) {
-          console.log('(%s:%s) %s'.red, buildEvent.build.buildId, buildEvent.build.notifyType, err);
+          console.log('(%s:%s) ✘ %s'.bold.red, buildEvent.build.buildId, buildEvent.build.notifyType, err);
         } else {
-          console.log('(%s:%s) Build status sent to GitHub'.green, buildEvent.build.buildId, buildEvent.build.notifyType);
+          console.log('(%s:%s) ✔︎ Build status sent to GitHub'.bold.green, buildEvent.build.buildId, buildEvent.build.notifyType);
         }
       });
     }, function (err) {
-      console.log('(%s:%s) %s'.red, buildEvent.build.buildId, buildEvent.build.notifyType, err);
+      console.log('(%s:%s) ✘ %s'.bold.red, buildEvent.build.buildId, buildEvent.build.notifyType, err);
     });
 });
 
