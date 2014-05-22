@@ -73,72 +73,66 @@ var handleEvent = function (buildEvent) {
   var buildId = buildEvent.build.buildId;
   var message = buildMessage(buildEvent.build);
 
-  console.log('(%s:%s) Message: %s', buildId, buildEvent.build.notifyType, message.description);
-  console.log('(%s:%s) Requesting build info from TeamCity', buildId, buildEvent.build.notifyType);
+  console.log('(%s:%s)   Message: %s'.black, buildId, buildEvent.build.notifyType, message.description);
+  console.log('(%s:%s)   Requesting changes for build'.black, buildId, buildEvent.build.notifyType);
 
   teamcity
-    .build(buildId)
-    .info(function (err, build) {
+    .change({ locator: 'build:(id:' + buildId + ')'})
+    .query(function (err, changeResult) {
       if (err) {
-        throw err;
+        deferred.reject(err);
+        return;
       }
 
-      console.log('(%s:%s) Received build info from TeamCity', buildId, buildEvent.build.notifyType);
-      console.log('(%s:%s) Requesting change info from TeamCity', buildId, buildEvent.build.notifyType);
+      if (!changeResult.count) {
+        deferred.reject('No changes found');
+        return;
+      }
+
+      console.log('(%s:%s)   Requesting change info'.black, buildId, buildEvent.build.notifyType);
 
       teamcity
-        .change({ locator: 'build:(id:' + buildId + ')'})
-        .query(function (err, changeResult) {
+        .change(changeResult.change[0].id)
+        .info(function (err, change) {
           if (err) {
             deferred.reject(err);
             return;
           }
 
-          if (!changeResult.count) {
-            deferred.reject('No changes found');
-            return;
-          }
+          console.log('(%s:%s)   Getting VCS root info from change'.black, buildId, buildEvent.build.notifyType);
 
           teamcity
-            .change(changeResult.change[0].id)
-            .info(function (err, change) {
+            .vcsRootInstance(change.vcsRootInstance.id)
+            .info(function (err, vcsRootInstance) {
               if (err) {
-                throw err;
+                deferred.reject(err);
+                return;
               }
 
-              console.log('(%s:%s) Getting VCS info', buildId, buildEvent.build.notifyType);
+              var url;
+              vcsRootInstance.properties.property.forEach(function (p) {
+                if (p.name === 'url') {
+                  url = p.value;
+                }
+              });
 
-              teamcity
-                .vcsRootInstance(change.vcsRootInstance.id)
-                .info(function (err, vcsRootInstance) {
-                  if (err) {
-                    throw err;
-                  }
+              if (!url) {
+                deferred.reject('Could not find GitHub URL in VCS root instance properties');
+                return;
+              }
 
-                  var url;
-                  vcsRootInstance.properties.property.forEach(function (p) {
-                    if (p.name === 'url') {
-                      url = p.value;
-                    }
-                  });
+              var repoUrl = url.match(/git@github.com:(.*).git/)[1];
+              var sha = change.version;
 
-                  if (!url) {
-                    throw new Error('Could not find VCS root instance GitHub URL');
-                  }
+              console.log('(%s:%s)   Found GitHub details: %s#%s'.black, buildId, buildEvent.build.notifyType, repoUrl, sha.substring(0, 7));
 
-                  var repoUrl = url.match(/git@github.com:(.*).git/)[1];
-                  var sha = change.version;
-
-                  console.log('(%s:%s) Found VCS (%s/%s)', buildId, buildEvent.build.notifyType, repoUrl, sha);
-
-                  deferred.resolve({
-                    repoUrl: repoUrl,
-                    sha: sha,
-                    state: message.state,
-                    description: message.description,
-                    buildEvent: buildEvent
-                  });
-                });
+              deferred.resolve({
+                repoUrl: repoUrl,
+                sha: sha,
+                state: message.state,
+                description: message.description,
+                buildEvent: buildEvent
+              });
             });
         });
     });
@@ -157,7 +151,11 @@ app.post('/github', function (req, res) {
 
   handleEvent(buildEvent)
     .then(function (completeBuildEvent) {
-      console.log('(%s:%s) Status handled, pushing to GitHub', buildEvent.build.buildId, buildEvent.build.notifyType);
+      console.log('(%s:%s)   Build info resolved: [%s] "%s"'.black,
+        buildEvent.build.buildId,
+        buildEvent.build.notifyType,
+        completeBuildEvent.state,
+        completeBuildEvent.description);
 
       // Update GitHub commit status
       var repo = client.repo(completeBuildEvent.repoUrl);
@@ -169,7 +167,9 @@ app.post('/github', function (req, res) {
         if (err) {
           console.log('(%s:%s) ✘ %s'.bold.red, buildEvent.build.buildId, buildEvent.build.notifyType, err);
         } else {
-          console.log('(%s:%s) ✔︎ Build status sent to GitHub'.bold.green, buildEvent.build.buildId, buildEvent.build.notifyType);
+          console.log('(%s:%s) ✔︎ Build status sent to GitHub'.bold.green,
+            buildEvent.build.buildId,
+            buildEvent.build.notifyType);
         }
       });
     }, function (err) {
