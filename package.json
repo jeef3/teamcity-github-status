@@ -1,6 +1,6 @@
 {
   "name": "teamcity-github-status",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "GitHub commit status from TeamCity",
   "homepage": "https://github.com/jeef3/teamcity-github-status",
   "repository": {
