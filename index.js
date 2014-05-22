@@ -25,105 +25,115 @@ app.configure(function () {
   app.use(express.bodyParser());
 });
 
-var handleEvent = function (buildEvent) {
-  var deferred = Q.defer();
+var buildMessage = function (build) {
+  var message = {};
 
-  var buildId = buildEvent.build.buildId;
-  var buildResult = buildEvent.build.buildResult.toLowerCase();
-  var notifyType = buildEvent.build.notifyType.toLowerCase();
-  var buildNumber = buildEvent.build.buildNumber;
-  var buildStatusText = buildEvent.build.buildStatus;
-
-  var state,
-    description;
+  var buildResult = build.buildResult.toLowerCase();
+  var notifyType = build.notifyType.toLowerCase();
+  var buildNumber = build.buildNumber;
+  var buildStatusText = build.buildStatus;
 
   // TeamCity has a rather complicated mixture of result and type to
   // determine state
   if (notifyType === 'buildstarted') {
-    state = 'pending';
-    description = 'Build #' + buildNumber + ' in progress';
+    message.state = 'pending';
+    message.description = 'Build #' + buildNumber + ' in progress';
   } else if (notifyType === 'buildinterrupted') {
     //error: interrupted
-    state = 'error';
-    description = 'Build #' + buildNumber + ' interrupted';
+    message.state = 'error';
+    message.description = 'Build #' + buildNumber + ' interrupted';
 
   } else if (notifyType === 'beforebuildfinish') {
-    state = 'pending';
-    description = 'Build #' + buildNumber + ' almost finished';
+    message.state = 'pending';
+    message.description = 'Build #' + buildNumber + ' almost finished';
 
   } else if (notifyType === 'buildfinished') {
     // check status: success/failure
     if (buildResult === 'success') {
-      state = 'success';
-      description = 'Build #' + buildNumber + ' successful';
+      message.state = 'success';
+      message.description = 'Build #' + buildNumber + ' successful';
     } else if (buildResult === 'failure') {
-      state = 'failure';
-      description = 'Build #' + buildNumber + ' failed';
+      message.state = 'failure';
+      message.description = 'Build #' + buildNumber + ' failed';
     } else {
-      state = 'error';
-      description = buildStatusText;
+      message.state = 'error';
+      message.description = buildStatusText;
     }
   } else {
-    state = 'error';
-    description = buildStatusText;
+    message.state = 'error';
+    message.description = buildStatusText;
   }
 
-  console.log('(%s:%s) %s', buildId, buildEvent.build.notifyType, description);
+  return message;
+};
+
+var handleEvent = function (buildEvent) {
+  var deferred = Q.defer();
+
+  var buildId = buildEvent.build.buildId;
+  var message = buildMessage(buildEvent.build);
+
+  console.log('(%s:%s)   Message: %s'.black, buildId, buildEvent.build.notifyType, message.description);
+  console.log('(%s:%s)   Requesting changes for build'.black, buildId, buildEvent.build.notifyType);
 
   teamcity
-    .build(buildId)
-    .info(function (err, build) {
+    .change({ locator: 'build:(id:' + buildId + ')'})
+    .query(function (err, changeResult) {
       if (err) {
-        throw err;
-      }
-
-      console.log('(%s:%s) Received build info from TeamCity', buildId, buildEvent.build.notifyType);
-
-      if (!build.revisions ||
-          !build.revisions.revision ||
-          !build.revisions.revision.length) {
-        deferred.reject('No revisions found');
-        console.log('---- Build Event ----');
-        console.log(buildEvent);
-        console.log('---- Build Info ----');
-        console.log(build);
+        deferred.reject(err);
         return;
       }
 
-      var revision = build.revisions.revision[0];
+      if (!changeResult.count) {
+        deferred.reject('No changes found');
+        return;
+      }
 
-      console.log('(%s:%s) Getting VCS info', buildId, buildEvent.build.notifyType);
+      console.log('(%s:%s)   Requesting change info'.black, buildId, buildEvent.build.notifyType);
 
       teamcity
-        .vcsRootInstance(revision['vcs-root-instance'].id)
-        .info(function (err, vcsRootInstance) {
+        .change(changeResult.change[0].id)
+        .info(function (err, change) {
           if (err) {
-            throw err;
+            deferred.reject(err);
+            return;
           }
 
-          var url;
-          vcsRootInstance.properties.property.forEach(function (p) {
-            if (p.name === 'url') {
-              url = p.value;
-            }
-          });
+          console.log('(%s:%s)   Getting VCS root info from change'.black, buildId, buildEvent.build.notifyType);
 
-          if (!url) {
-            throw new Error('Could not find VCS root instance GitHub URL');
-          }
+          teamcity
+            .vcsRootInstance(change.vcsRootInstance.id)
+            .info(function (err, vcsRootInstance) {
+              if (err) {
+                deferred.reject(err);
+                return;
+              }
 
-          var repoUrl = url.match(/git@github.com:(.*).git/)[1];
-          var sha = revision.version;
+              var url;
+              vcsRootInstance.properties.property.forEach(function (p) {
+                if (p.name === 'url') {
+                  url = p.value;
+                }
+              });
 
-          console.log('(%s:%s) Found VCS (%s/%s)', buildId, buildEvent.build.notifyType, repoUrl, sha);
+              if (!url) {
+                deferred.reject('Could not find GitHub URL in VCS root instance properties');
+                return;
+              }
 
-          deferred.resolve({
-            repoUrl: repoUrl,
-            sha: sha,
-            state: state,
-            description: description,
-            buildEvent: buildEvent
-          });
+              var repoUrl = url.match(/git@github.com:(.*).git/)[1];
+              var sha = change.version;
+
+              console.log('(%s:%s)   Found GitHub details: %s#%s'.black, buildId, buildEvent.build.notifyType, repoUrl, sha.substring(0, 7));
+
+              deferred.resolve({
+                repoUrl: repoUrl,
+                sha: sha,
+                state: message.state,
+                description: message.description,
+                buildEvent: buildEvent
+              });
+            });
         });
     });
 
@@ -135,11 +145,17 @@ app.post('/github', function (req, res) {
 
   var buildEvent = req.body;
 
-  console.log('(%s:%s) Webhook received', buildEvent.build.buildId, buildEvent.build.notifyType);
+  console.log('(%s:%s) Received TeamCity build event'.bold.white,
+    buildEvent.build.buildId,
+    buildEvent.build.notifyType);
 
   handleEvent(buildEvent)
     .then(function (completeBuildEvent) {
-      console.log('(%s:%s) Status handled, pushing to GitHub', buildEvent.build.buildId, buildEvent.build.notifyType);
+      console.log('(%s:%s)   Build info resolved: [%s] "%s"'.black,
+        buildEvent.build.buildId,
+        buildEvent.build.notifyType,
+        completeBuildEvent.state,
+        completeBuildEvent.description);
 
       // Update GitHub commit status
       var repo = client.repo(completeBuildEvent.repoUrl);
@@ -149,13 +165,15 @@ app.post('/github', function (req, res) {
         description: completeBuildEvent.description
       }, function (err) {
         if (err) {
-          console.log('(%s:%s) %s'.red, buildEvent.build.buildId, buildEvent.build.notifyType, err);
+          console.log('(%s:%s) ✘ %s'.bold.red, buildEvent.build.buildId, buildEvent.build.notifyType, err);
         } else {
-          console.log('(%s:%s) Build status sent to GitHub'.green, buildEvent.build.buildId, buildEvent.build.notifyType);
+          console.log('(%s:%s) ✔︎ Build status sent to GitHub'.bold.green,
+            buildEvent.build.buildId,
+            buildEvent.build.notifyType);
         }
       });
     }, function (err) {
-      console.log('(%s:%s) %s'.red, buildEvent.build.buildId, buildEvent.build.notifyType, err);
+      console.log('(%s:%s) ✘ %s'.bold.red, buildEvent.build.buildId, buildEvent.build.notifyType, err);
     });
 });
 
