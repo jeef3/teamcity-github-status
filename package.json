@@ -1,6 +1,6 @@
 {
   "name": "teamcity-github-status",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "GitHub commit status from TeamCity",
   "homepage": "https://github.com/jeef3/teamcity-github-status",
   "repository": {
@@ -27,7 +27,7 @@
     "colors": "^0.6.2",
     "dotenv": "^0.2.7",
     "nconf": "^0.6.9",
-    "teamcity": "0.0.2"
+    "teamcity": "0.0.3"
   },
   "devDependencies": {},
   "scripts": {
