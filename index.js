@@ -77,14 +77,14 @@ var handleEvent = function (buildEvent) {
   console.log('(%s:%s)   Requesting changes for build'.black, buildId, buildEvent.build.notifyType);
 
   teamcity
-    .change({ locator: 'build:(id:' + buildId + ')'})
-    .query(function (err, changeResult) {
+    .build(buildId)
+    .info(function (err, buildInfo) {
       if (err) {
         deferred.reject(err);
         return;
       }
 
-      if (!changeResult.count) {
+      if (!buildInfo.lastChanges.count) {
         deferred.reject('No changes found');
         return;
       }
@@ -92,7 +92,7 @@ var handleEvent = function (buildEvent) {
       console.log('(%s:%s)   Requesting change info'.black, buildId, buildEvent.build.notifyType);
 
       teamcity
-        .change(changeResult.change[0].id)
+        .change(buildInfo.lastChanges.change[0].id)
         .info(function (err, change) {
           if (err) {
             deferred.reject(err);
