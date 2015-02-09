@@ -84,7 +84,7 @@ var handleEvent = function (buildEvent) {
         return;
       }
 
-      if (!buildInfo.lastChanges.count) {
+      if (!buildInfo.lastChanges || !buildInfo.lastChanges.count) {
         deferred.reject('No changes found');
         return;
       }
