@@ -19,6 +19,7 @@ Create a `.env` file and set-up environment variables for:
  - `TEAMCITY_PROTOCOL`
  - `TEAMCITY_BASE_URL`
  - `GITHUB_TOKEN`
+ - `GITHUB_STATUS_CONTEXT` (optional)
 
 Start up the server with `npm start` (or your preferred method of running NodeJS apps as a service).
 

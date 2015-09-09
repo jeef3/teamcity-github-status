@@ -162,7 +162,8 @@ app.post('/github', function (req, res) {
       repo.status(completeBuildEvent.sha, {
         state: completeBuildEvent.state,
         'target_url': buildEvent.build.buildStatusUrl,
-        description: completeBuildEvent.description
+        description: completeBuildEvent.description,
+        context: nconf.get('GITHUB_STATUS_CONTEXT')
       }, function (err) {
         if (err) {
           console.log('(%s:%s) ✘ %s'.bold.red, buildEvent.build.buildId, buildEvent.build.notifyType, err);
